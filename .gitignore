@@ -16,3 +16,4 @@ docs/.cache/
 .qodo
 poetry.lock
 .log
+pr_agent/settings/.secrets.toml 
