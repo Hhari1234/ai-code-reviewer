@@ -154,7 +154,8 @@ def run(inargs=None, args=None):
 
     result = asyncio.run(inner())
     if not result:
-        parser.print_help()
+        get_logger().error(f"Command '{command}' failed. See the log above for details.")
+        sys.exit(1)
 
 
 if __name__ == '__main__':

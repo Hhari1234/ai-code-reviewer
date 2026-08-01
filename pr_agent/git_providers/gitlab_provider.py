@@ -89,7 +89,8 @@ class GitLabProvider(GitProvider):
         """
         try:
             proj = self.gl.projects.get(self.id_project)
-        except Exception:
+        except Exception as e:
+            get_logger().warning(f"[submodule] could not get project {self.id_project}: {e}")
             return {}
 
         import base64
@@ -109,16 +110,16 @@ class GitLabProvider(GitProvider):
                     return raw.decode("utf-8", "ignore")
                 if isinstance(raw, str):
                     return raw
-            except Exception:
-                pass
+            except Exception as e:
+                get_logger().debug(f"[submodule] File.decode() failed, falling back to base64: {e}")
 
             # 2) fallback: base64 decode f.content
             try:
                 c = getattr(f, "content", None)
                 if c:
                     return base64.b64decode(c).decode("utf-8", "ignore")
-            except Exception:
-                pass
+            except Exception as e:
+                get_logger().warning(f"[submodule] failed to base64-decode file content: {e}")
 
             return None
 
@@ -139,7 +140,8 @@ class GitLabProvider(GitProvider):
         )
         try:
             parser.read_string(content)
-        except Exception:
+        except Exception as e:
+            get_logger().warning(f"[submodule] could not parse '.gitmodules': {e}")
             return {}
 
         out: dict[str, str] = {}
@@ -184,14 +186,14 @@ class GitLabProvider(GitProvider):
         try:
             enc = urllib.parse.quote_plus(proj_path)
             return self.gl.projects.get(enc)
-        except Exception:
-            pass
+        except Exception as e:
+            get_logger().debug(f"[submodule] project lookup by encoded path failed for {proj_path}: {e}")
 
         # 2) Raw
         try:
             return self.gl.projects.get(proj_path)
-        except Exception:
-            pass
+        except Exception as e:
+            get_logger().debug(f"[submodule] project lookup by raw path failed for {proj_path}: {e}")
 
         # 3) Search fallback
         try:
@@ -205,8 +207,8 @@ class GitLabProvider(GitProvider):
                     return self.gl.projects.get(p.id)
             if matches:
                 get_logger().warning(f"[submodule] no exact match for {proj_path} (skip)")
-        except Exception:
-            pass
+        except Exception as e:
+            get_logger().warning(f"[submodule] project search failed for {proj_path}: {e}")
 
         return None
 
@@ -425,7 +427,7 @@ class GitLabProvider(GitProvider):
                     'filtered_files': names_filtered
                 })
             except Exception as e:
-                pass
+                get_logger().debug(f"Failed to log filtered [ignore] files: {e}")
 
         diff_files = []
         invalid_files_names = []
@@ -1044,7 +1046,8 @@ class GitLabProvider(GitProvider):
         try:
             commit_messages_list = [commit['message'] for commit in self.mr.commits()._list]
             commit_messages_str = "\n".join([f"{i + 1}. {message}" for i, message in enumerate(commit_messages_list)])
-        except Exception:
+        except Exception as e:
+            get_logger().warning(f"Failed to get commit messages: {e}")
             commit_messages_str = ""
         if max_tokens:
             commit_messages_str = clip_tokens(commit_messages_str, max_tokens)
@@ -1054,7 +1057,8 @@ class GitLabProvider(GitProvider):
         try:
             pr_id = self.mr.web_url
             return pr_id
-        except:
+        except Exception as e:
+            get_logger().warning(f"Failed to get MR id: {e}")
             return ""
 
     def get_line_link(self, relevant_file: str, relevant_line_start: int, relevant_line_end: int = None) -> str:

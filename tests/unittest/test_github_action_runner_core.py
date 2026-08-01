@@ -16,12 +16,27 @@ def test_is_true_accepts_bool_and_case_insensitive_true_string():
 
 
 @pytest.mark.asyncio
-async def test_run_action_returns_when_required_env_is_missing(monkeypatch, capsys):
+async def test_run_action_fails_when_required_env_is_missing(monkeypatch):
     monkeypatch.delenv("GITHUB_EVENT_NAME", raising=False)
 
-    await github_action_runner.run_action()
+    with pytest.raises(SystemExit) as exc_info:
+        await github_action_runner.run_action()
 
-    assert "GITHUB_EVENT_NAME not set" in capsys.readouterr().out
+    assert exc_info.value.code == 1
+
+
+@pytest.mark.asyncio
+async def test_run_action_fails_on_unparsable_event_payload(monkeypatch, tmp_path, restore_github_settings):
+    event_path = tmp_path / "event.json"
+    event_path.write_text("{not-json")
+    monkeypatch.setenv("GITHUB_EVENT_NAME", "pull_request")
+    monkeypatch.setenv("GITHUB_EVENT_PATH", str(event_path))
+    monkeypatch.setenv("GITHUB_TOKEN", "token")
+
+    with pytest.raises(SystemExit) as exc_info:
+        await github_action_runner.run_action()
+
+    assert exc_info.value.code == 1
 
 
 @pytest.mark.asyncio

@@ -246,7 +246,8 @@ class CodeCommitProvider(GitProvider):
         try:
             pr_id = f"{self.repo_name}/{self.pr_num}"
             return pr_id
-        except:
+        except Exception as e:
+            get_logger().warning(f"Failed to get PR id: {e}")
             return ""
 
     def get_languages(self):

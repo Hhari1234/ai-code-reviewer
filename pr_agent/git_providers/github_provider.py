@@ -11,8 +11,8 @@ from datetime import datetime
 from typing import Optional, Tuple
 from urllib.parse import urlparse
 
-from github.Issue import Issue
 from github import AppAuthentication, Auth, Github, GithubException
+from github.Issue import Issue
 from retry.api import retry_call
 from starlette_context import context
 
@@ -222,7 +222,8 @@ class GithubProvider(GitProvider):
             self.git_files = list(self.pr.get_files()) # 'list' to handle pagination
             context["git_files"] = self.git_files
             return self.git_files
-        except Exception:
+        except Exception as e:
+            get_logger().debug(f"Could not use the request context cache for git files: {e}")
             if not self.git_files:
                 self.git_files = list(self.pr.get_files())
             return self.git_files
@@ -234,6 +235,7 @@ class GithubProvider(GitProvider):
             try:
                 return len(self.git_files)
             except Exception as e:
+                get_logger().warning(f"Failed to get number of files: {e}")
                 return -1
 
     def get_diff_files(self) -> list[FilePatchInfo]:
@@ -256,8 +258,8 @@ class GithubProvider(GitProvider):
                 diff_files = context.get("diff_files", None)
                 if diff_files:
                     return diff_files
-            except Exception:
-                pass
+            except Exception as e:
+                get_logger().debug(f"Could not use the request context cache for diff files: {e}")
 
             if self.diff_files:
                 return self.diff_files
@@ -272,8 +274,8 @@ class GithubProvider(GitProvider):
                     get_logger().info(f"Filtered out [ignore] files for pull request:", extra=
                     {"files": names_original,
                      "filtered_files": names_new})
-                except Exception:
-                    pass
+                except Exception as e:
+                    get_logger().debug(f"Failed to log filtered [ignore] files: {e}")
 
             diff_files = []
             invalid_files_names = []
@@ -365,8 +367,8 @@ class GithubProvider(GitProvider):
             self.diff_files = diff_files
             try:
                 context["diff_files"] = diff_files
-            except Exception:
-                pass
+            except Exception as e:
+                get_logger().debug(f"Could not cache diff files in the request context: {e}")
 
             return diff_files
 
@@ -596,22 +598,22 @@ class GithubProvider(GitProvider):
     def get_review_thread_comments(self, comment_id: int) -> list[dict]:
         """
         Retrieves all comments in the same thread as the given comment.
-        
+
         Args:
             comment_id: Review comment ID
-                
+
         Returns:
             List of comments in the same thread
         """
         try:
             # Fetch all comments with a single API call
             all_comments = list(self.pr.get_comments())
-            
+
             # Find the target comment by ID
             target_comment = next((c for c in all_comments if c.id == comment_id), None)
             if not target_comment:
                 return []
-        
+
             # Get root comment id
             root_comment_id = target_comment.raw_data.get("in_reply_to_id", target_comment.id)
             # Build the thread - include the root comment and all replies to it
@@ -619,10 +621,10 @@ class GithubProvider(GitProvider):
                 c for c in all_comments if
                 c.id == root_comment_id or c.raw_data.get("in_reply_to_id") == root_comment_id
             ]
-        
-        
+
+
             return thread_comments
-                
+
         except Exception as e:
             get_logger().exception(f"Failed to get review comments for an inline ask command", artifact={"comment_id": comment_id, "error": e})
             return []
@@ -639,8 +641,9 @@ class GithubProvider(GitProvider):
         if verified_comments:
             try:
                 self.pr.create_review(commit=self.last_commit_id, comments=verified_comments)
-            except:
-                pass
+            except Exception as e:
+                get_logger().error(f"Failed to publish {len(verified_comments)} verified inline comments: {e}",
+                                   artifact={"comments": verified_comments})
 
         # try to publish one by one the invalid comments as a one-line code comment
         if invalid_comments and get_settings().github.try_fix_invalid_inline_comments:
@@ -650,8 +653,8 @@ class GithubProvider(GitProvider):
                 try:
                     self.publish_inline_comments([comment], disable_fallback=True)
                     get_logger().info(f"Published invalid comment as a single line comment: {comment}")
-                except:
-                    get_logger().error(f"Failed to publish invalid comment as a single line comment: {comment}")
+                except Exception as e:
+                    get_logger().error(f"Failed to publish invalid comment as a single line comment: {comment}, error: {e}")
 
     def _verify_code_comment(self, comment: dict):
         is_verified = False
@@ -885,7 +888,7 @@ class GithubProvider(GitProvider):
                 self.github_user_id = self.github_client.get_user().raw_data['login']
             except Exception as e:
                 self.github_user_id = ""
-                # logging.exception(f"Failed to get user id, error: {e}")
+                get_logger().warning(f"Failed to get user id, error: {e}")
         return self.github_user_id
 
     def get_notifications(self, since: datetime):
@@ -1136,7 +1139,8 @@ class GithubProvider(GitProvider):
                 .get_contents(file_path, ref=branch)
                 .decoded_content.decode()
             )
-        except Exception:
+        except Exception as e:
+            get_logger().debug(f"Could not get file content for '{file_path}' on branch '{branch}': {e}")
             file_content_str = ""
         return file_content_str
 
@@ -1146,7 +1150,8 @@ class GithubProvider(GitProvider):
         try:
             file_obj = self._get_repo().get_contents(file_path, ref=branch)
             sha1=file_obj.sha
-        except Exception:
+        except Exception as e:
+            get_logger().debug(f"Could not get sha of '{file_path}' on branch '{branch}', assuming a new file: {e}")
             sha1=""
         self.repo_obj.update_file(
             path=file_path,
@@ -1204,7 +1209,8 @@ class GithubProvider(GitProvider):
             commit_list = self.pr.get_commits()
             commit_messages = [commit.commit.message for commit in commit_list]
             commit_messages_str = "\n".join([f"{i + 1}. {message}" for i, message in enumerate(commit_messages)])
-        except Exception:
+        except Exception as e:
+            get_logger().warning(f"Failed to get commit messages: {e}")
             commit_messages_str = ""
         if max_tokens:
             commit_messages_str = clip_tokens(commit_messages_str, max_tokens)
@@ -1275,7 +1281,8 @@ class GithubProvider(GitProvider):
         try:
             pr_id = f"{self.repo}/{self.pr_num}"
             return pr_id
-        except:
+        except Exception as e:
+            get_logger().warning(f"Failed to get PR id: {e}")
             return ""
 
     def fetch_sub_issues(self, issue_url):
@@ -1343,7 +1350,7 @@ class GithubProvider(GitProvider):
             if not sub_issues_response_json.get("data", {}).get("node", {}).get("subIssues"):
                 get_logger().error("Invalid sub-issues response structure")
                 return sub_issues
-    
+
             nodes = sub_issues_response_json.get("data", {}).get("node", {}).get("subIssues", {}).get("nodes", [])
             get_logger().info(f"Github Sub-issues fetched: {len(nodes)}", artifact={"nodes": nodes})
 

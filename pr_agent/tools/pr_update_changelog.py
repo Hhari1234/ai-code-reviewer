@@ -143,7 +143,7 @@ class PRUpdateChangelog:
             existing_content = self.changelog_file
         else:
             existing_content = ""
-        
+
         if existing_content:
             new_file_content = answer + "\n\n" + self.changelog_file
         else:
@@ -178,8 +178,10 @@ class PRUpdateChangelog:
                     start_line=1,
                 )
                 self.git_provider.pr.create_review(commit=last_commit_id, comments=[d])
-        except Exception:
+        except Exception as e:
             # we can't create a review for some reason, let's just publish a comment
+            get_logger().warning(f"Failed to publish the changelog as a review comment, "
+                                 f"falling back to a regular comment: {e}")
             self.git_provider.publish_comment(f"**Changelog updates: 🔄**\n\n{answer}")
 
     def _get_default_changelog(self):
@@ -202,10 +204,10 @@ Example:
             self.changelog_file = self.git_provider.get_pr_file_content(
                 "CHANGELOG.md", self.git_provider.get_pr_branch()
             )
-            
+
             if isinstance(self.changelog_file, bytes):
                 self.changelog_file = self.changelog_file.decode('utf-8')
-            
+
             changelog_file_lines = self.changelog_file.splitlines()
             changelog_file_lines = changelog_file_lines[:CHANGELOG_LINES]
             self.changelog_file_str = "\n".join(changelog_file_lines)

@@ -275,15 +275,15 @@ def apply_repo_settings(pr_url):
         try:
             try:
                 repo_settings = context.get("repo_settings", None)
-            except Exception:
+            except Exception as e:
+                get_logger().debug(f"Could not use the request context cache for repo settings: {e}")
                 repo_settings = None
-                pass
             if repo_settings is None:  # None is different from "", which is a valid value
                 repo_settings = git_provider.get_repo_settings()
                 try:
                     context["repo_settings"] = repo_settings
-                except Exception:
-                    pass
+                except Exception as e:
+                    get_logger().debug(f"Could not cache repo settings in the request context: {e}")
 
             config_errors = []
             if repo_settings:

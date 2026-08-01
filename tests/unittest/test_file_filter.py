@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 from pr_agent.algo.file_filter import filter_ignored
 from pr_agent.config_loader import global_settings
 
@@ -78,7 +80,7 @@ class TestIgnoreFilter:
 
         filtered_files = filter_ignored(files)
         assert filtered_files == expected, f"Expected {[file.filename for file in expected]}, but got {[file.filename for file in filtered_files]}."
-    
+
     def test_language_framework_ignores(self, monkeypatch):
         """
         Test files are ignored based on language/framework mapping (e.g., protobuf).
@@ -128,3 +130,22 @@ class TestIgnoreFilter:
             f"Expected {[f.filename for f in expected]}, "
             f"but got {[f.filename for f in filtered]}"
         )
+
+    def test_invalid_regex_is_logged_and_skipped(self, monkeypatch):
+        """
+        An invalid ignore regex is skipped, but the user is warned instead of the error being swallowed.
+        """
+        monkeypatch.setattr(global_settings.ignore, 'regex', ['[invalid', '.*\\.py'])
+
+        files = [
+            type('', (object,), {'filename': 'file1.py'})(),
+            type('', (object,), {'filename': 'file2.java'})()
+        ]
+
+        warnings = []
+        with patch('pr_agent.algo.file_filter.get_logger') as mock_get_logger:
+            mock_get_logger.return_value.warning = lambda msg, *a, **kw: warnings.append(msg)
+            filtered = filter_ignored(files)
+
+        assert filtered == [files[1]]
+        assert any('[invalid' in warning for warning in warnings)

@@ -85,7 +85,7 @@ class PRAgent:
                 if str(type(setting)) == "<class 'dynaconf.utils.boxing.DynaBox'>":
                     if hasattr(setting, 'extra_instructions'):
                         current_extra_instructions = setting.extra_instructions
-                        
+
                         # Define the language-specific instruction and the separator
                         lang_instruction_text = f"Your response MUST be written in the language corresponding to locale code: '{response_language}'. This is crucial."
                         separator_text = "\n======\n\nIn addition, "
@@ -122,6 +122,6 @@ class PRAgent:
     async def handle_request(self, pr_url, request, notify=None) -> bool:
         try:
             return await self._handle_request(pr_url, request, notify)
-        except:
-            get_logger().exception("Failed to process the command.")
+        except Exception as e:
+            get_logger().exception(f"Failed to process the command: {e}", artifact={"pr_url": pr_url, "request": request})
             return False
