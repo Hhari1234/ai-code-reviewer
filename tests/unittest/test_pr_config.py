@@ -99,6 +99,7 @@ class TestPreparePrConfigs:
         assert "```" in markdown_text
 
 
+@pytest.mark.asyncio
 class TestRun:
     async def test_publishes_configs_when_publish_output_enabled(self, tmp_path):
         settings = _make_settings(tmp_path, {"CONFIG": {"model": "gpt-4"}})

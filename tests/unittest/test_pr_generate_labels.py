@@ -1,5 +1,7 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
 from pr_agent.tools.pr_generate_labels import PRGenerateLabels
 
 
@@ -93,6 +95,7 @@ class TestPrepareLabels:
         assert generate_labels._prepare_labels() == ["Bug fix"]
 
 
+@pytest.mark.asyncio
 class TestPrediction:
     async def test_prepare_prediction_stores_diff_and_prediction(self):
         generate_labels = _make_generate_labels()
@@ -123,6 +126,7 @@ class TestPrediction:
         assert kwargs["user"] == "user a diff"
 
 
+@pytest.mark.asyncio
 class TestRun:
     async def test_publishes_generated_and_user_labels_when_provider_supports_labels(self):
         git_provider = MagicMock()

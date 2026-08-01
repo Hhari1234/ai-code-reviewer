@@ -160,6 +160,7 @@ class TestPushInlineDocs:
                 for call in git_provider.publish_code_suggestions.call_args_list[1:]] == ["a.py", "b.py"]
 
 
+@pytest.mark.asyncio
 class TestPrediction:
     async def test_prepare_prediction_requests_a_numbered_diff(self):
         add_docs = _make_add_docs()
@@ -186,6 +187,7 @@ class TestPrediction:
         assert add_docs.vars["diff"] == "", "the original vars must not be mutated"
 
 
+@pytest.mark.asyncio
 class TestRun:
     async def test_publishes_documentation_when_publish_output_enabled(self):
         git_provider = MagicMock()
