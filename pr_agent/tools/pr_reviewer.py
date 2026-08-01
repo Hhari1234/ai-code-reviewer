@@ -9,11 +9,11 @@ from jinja2 import Environment, StrictUndefined
 
 from pr_agent.algo.ai_handlers.base_ai_handler import BaseAiHandler
 from pr_agent.algo.ai_handlers.litellm_ai_handler import LiteLLMAIHandler
-from pr_agent.algo.pr_processing import (add_ai_metadata_to_diff_files,
+from pr_agent.algo.pr_processing import (apply_ai_metadata_if_enabled,
                                          get_pr_diff,
                                          retry_with_fallback_models)
-from pr_agent.algo.skills_loader import get_skills_context
 from pr_agent.algo.repo_context import build_repo_context
+from pr_agent.algo.skills_loader import get_skills_context
 from pr_agent.algo.token_handler import TokenHandler
 from pr_agent.algo.utils import (ModelType, PRReviewHeader,
                                  convert_to_markdown_v2, github_action_output,
@@ -68,13 +68,7 @@ class PRReviewer:
         question_str, answer_str = self._get_user_answers()
         self.pr_description, self.pr_description_files = (
             self.git_provider.get_pr_description(split_changes_walkthrough=True))
-        if (self.pr_description_files and get_settings().get("config.is_auto_command", False) and
-                get_settings().get("config.enable_ai_metadata", False)):
-            add_ai_metadata_to_diff_files(self.git_provider, self.pr_description_files)
-            get_logger().debug(f"AI metadata added to the this command")
-        else:
-            get_settings().set("config.enable_ai_metadata", False)
-            get_logger().debug(f"AI metadata is disabled for this command")
+        apply_ai_metadata_if_enabled(self.git_provider, self.pr_description_files)
 
         self.vars = {
             "title": self.git_provider.pr.title,
