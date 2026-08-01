@@ -13,20 +13,23 @@ from jinja2 import Environment, StrictUndefined
 from pr_agent.algo import MAX_TOKENS
 from pr_agent.algo.ai_handlers.base_ai_handler import BaseAiHandler
 from pr_agent.algo.ai_handlers.litellm_ai_handler import LiteLLMAIHandler
-from pr_agent.algo.git_patch_processing import decouple_and_convert_to_hunks_with_lines_numbers
-from pr_agent.algo.pr_processing import (add_ai_metadata_to_diff_files,
+from pr_agent.algo.git_patch_processing import \
+    decouple_and_convert_to_hunks_with_lines_numbers
+from pr_agent.algo.pr_processing import (apply_ai_metadata_if_enabled,
                                          get_pr_diff, get_pr_multi_diffs,
                                          retry_with_fallback_models)
-from pr_agent.algo.skills_loader import get_skills_context
 from pr_agent.algo.repo_context import build_repo_context
+from pr_agent.algo.skills_loader import get_skills_context
 from pr_agent.algo.token_handler import TokenHandler
-from pr_agent.algo.utils import (ModelType, load_yaml, replace_code_tags,
-                                 show_relevant_configurations, get_max_tokens, clip_tokens, get_model)
+from pr_agent.algo.utils import (ModelType, clip_tokens, get_max_tokens,
+                                 get_model, load_yaml, replace_code_tags,
+                                 show_relevant_configurations)
 from pr_agent.config_loader import get_settings
 from pr_agent.git_providers import (AzureDevopsProvider, GithubProvider,
                                     GitLabProvider, get_git_provider,
                                     get_git_provider_with_context)
-from pr_agent.git_providers.git_provider import get_main_pr_language, GitProvider
+from pr_agent.git_providers.git_provider import (GitProvider,
+                                                 get_main_pr_language)
 from pr_agent.log import get_logger
 from pr_agent.servers.help import HelpMessage
 from pr_agent.tools.pr_description import insert_br_after_x_chars
@@ -52,13 +55,7 @@ class PRCodeSuggestions:
         self.cli_mode = cli_mode
         self.pr_description, self.pr_description_files = (
             self.git_provider.get_pr_description(split_changes_walkthrough=True))
-        if (self.pr_description_files and get_settings().get("config.is_auto_command", False) and
-                get_settings().get("config.enable_ai_metadata", False)):
-            add_ai_metadata_to_diff_files(self.git_provider, self.pr_description_files)
-            get_logger().debug(f"AI metadata added to the this command")
-        else:
-            get_settings().set("config.enable_ai_metadata", False)
-            get_logger().debug(f"AI metadata is disabled for this command")
+        apply_ai_metadata_if_enabled(self.git_provider, self.pr_description_files)
 
         self.vars = {
             "title": self.git_provider.pr.title,

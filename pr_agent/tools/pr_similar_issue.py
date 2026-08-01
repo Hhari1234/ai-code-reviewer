@@ -262,7 +262,8 @@ class PRSimilarIssue:
             message = "The /similar_issue tool is currently supported only for GitHub."
             if get_settings().config.publish_output:
                 try:
-                    from pr_agent.git_providers import get_git_provider_with_context
+                    from pr_agent.git_providers import \
+                        get_git_provider_with_context
 
                     provider = get_git_provider_with_context(self.issue_url)
                     provider.publish_comment(message)
@@ -398,7 +399,12 @@ class PRSimilarIssue:
         issue_str = f"Issue Header: \"{header}\"\n\nIssue Body:\n{body}"
         return issue_str, comments, number
 
-    def _update_index_with_issues(self, issues_list, repo_name_for_index, upsert=False):
+    def _build_issues_corpus(self, issues_list, repo_name_for_index):
+        """Scan issues (and their comments) and build a Corpus of embeddable records.
+
+        Shared by the pinecone/lancedb/qdrant index builders so the scan limit, token
+        gating and record layout stay identical across vector databases.
+        """
         get_logger().info('Processing issues...')
         corpus = Corpus()
         example_issue_record = Record(
@@ -453,12 +459,17 @@ class PRSimilarIssue:
                                                   level=IssueLevel.COMMENT)
                             )
                             corpus.append(comment_record)
-        df = pd.DataFrame(corpus.model_dump()["documents"])
-        get_logger().info('Done')
+        return corpus
 
+    @staticmethod
+    def _embed_corpus_texts(list_to_encode):
+        """Embed a list of texts with OpenAI, degrading to one-by-one on batch failure.
+
+        A single text that still fails to embed contributes a zero vector so the
+        resulting list stays aligned with the input.
+        """
         get_logger().info('Embedding...')
         openai.api_key = get_settings().openai.key
-        list_to_encode = list(df["text"].values)
         try:
             res = openai.Embedding.create(input=list_to_encode, engine=MODEL)
             embeds = [record['embedding'] for record in res['data']]
@@ -471,7 +482,19 @@ class PRSimilarIssue:
                     embeds.append(res['data'][0]['embedding'])
                 except:
                     embeds.append([0] * 1536)
+        return embeds
+
+    def _update_index_with_issues(self, issues_list, repo_name_for_index, upsert=False):
+        import pandas as pd
+
+        corpus = self._build_issues_corpus(issues_list, repo_name_for_index)
+        df = pd.DataFrame(corpus.model_dump()["documents"])
+        get_logger().info('Done')
+
+        embeds = self._embed_corpus_texts(list(df["text"].values))
         df["values"] = embeds
+        get_logger().info('Done')
+
         meta = DatasetMetadata.empty()
         meta.dense_model.dimension = len(embeds[0])
         ds = Dataset.from_pandas(df, meta)
@@ -494,80 +517,13 @@ class PRSimilarIssue:
         get_logger().info('Done')
 
     def _update_table_with_issues(self, issues_list, repo_name_for_index, ingest=False):
-        get_logger().info('Processing issues...')
+        import pandas as pd
 
-        corpus = Corpus()
-        example_issue_record = Record(
-            id=f"example_issue_{repo_name_for_index}",
-            text="example_issue",
-            metadata=Metadata(repo=repo_name_for_index)
-        )
-        corpus.append(example_issue_record)
-
-        counter = 0
-        for issue in issues_list:
-            if issue.pull_request:
-                continue
-
-            counter += 1
-            if counter % 100 == 0:
-                get_logger().info(f"Scanned {counter} issues")
-            if counter >= self.max_issues_to_scan:
-                get_logger().info(f"Scanned {self.max_issues_to_scan} issues, stopping")
-                break
-
-            issue_str, comments, number = self._process_issue(issue)
-            issue_key = f"issue_{number}"
-            username = issue.user.login
-            created_at = str(issue.created_at)
-            if len(issue_str) < 8000 or \
-                    self.token_handler.count_tokens(issue_str) < get_max_tokens(MODEL):  # fast reject first
-                issue_record = Record(
-                    id=issue_key + "." + "issue",
-                    text=issue_str,
-                    metadata=Metadata(repo=repo_name_for_index,
-                                        username=username,
-                                        created_at=created_at,
-                                        level=IssueLevel.ISSUE)
-                )
-                corpus.append(issue_record)
-                if comments:
-                    for j, comment in enumerate(comments):
-                        comment_body = comment.body
-                        num_words_comment = len(comment_body.split())
-                        if num_words_comment < 10 or not isinstance(comment_body, str):
-                            continue
-
-                        if len(comment_body) < 8000 or \
-                                self.token_handler.count_tokens(comment_body) < MAX_TOKENS[MODEL]:
-                            comment_record = Record(
-                                id=issue_key + ".comment_" + str(j + 1),
-                                text=comment_body,
-                                metadata=Metadata(repo=repo_name_for_index,
-                                                    username=username,  # use issue username for all comments
-                                                    created_at=created_at,
-                                                    level=IssueLevel.COMMENT)
-                            )
-                            corpus.append(comment_record)
+        corpus = self._build_issues_corpus(issues_list, repo_name_for_index)
         df = pd.DataFrame(corpus.model_dump()["documents"])
         get_logger().info('Done')
 
-        get_logger().info('Embedding...')
-        openai.api_key = get_settings().openai.key
-        list_to_encode = list(df["text"].values)
-        try:
-            res = openai.Embedding.create(input=list_to_encode, engine=MODEL)
-            embeds = [record['embedding'] for record in res['data']]
-        except:
-            embeds = []
-            get_logger().error('Failed to embed entire list, embedding one by one...')
-            for i, text in enumerate(list_to_encode):
-                try:
-                    res = openai.Embedding.create(input=[text], engine=MODEL)
-                    embeds.append(res['data'][0]['embedding'])
-                except:
-                    embeds.append([0] * 1536)
-        df["vector"] = embeds
+        df["vector"] = self._embed_corpus_texts(list(df["text"].values))
         get_logger().info('Done')
 
         if not ingest:
@@ -593,80 +549,11 @@ class PRSimilarIssue:
         except Exception:
             raise
 
-        get_logger().info('Processing issues...')
-        corpus = Corpus()
-        example_issue_record = Record(
-            id=f"example_issue_{repo_name_for_index}",
-            text="example_issue",
-            metadata=Metadata(repo=repo_name_for_index)
-        )
-        corpus.append(example_issue_record)
-
-        counter = 0
-        for issue in issues_list:
-            if issue.pull_request:
-                continue
-
-            counter += 1
-            if counter % 100 == 0:
-                get_logger().info(f"Scanned {counter} issues")
-            if counter >= self.max_issues_to_scan:
-                get_logger().info(f"Scanned {self.max_issues_to_scan} issues, stopping")
-                break
-
-            issue_str, comments, number = self._process_issue(issue)
-            issue_key = f"issue_{number}"
-            username = issue.user.login
-            created_at = str(issue.created_at)
-            if len(issue_str) < 8000 or \
-                    self.token_handler.count_tokens(issue_str) < get_max_tokens(MODEL):
-                issue_record = Record(
-                    id=issue_key + "." + "issue",
-                    text=issue_str,
-                    metadata=Metadata(repo=repo_name_for_index,
-                                      username=username,
-                                      created_at=created_at,
-                                      level=IssueLevel.ISSUE)
-                )
-                corpus.append(issue_record)
-                if comments:
-                    for j, comment in enumerate(comments):
-                        comment_body = comment.body
-                        num_words_comment = len(comment_body.split())
-                        if num_words_comment < 10 or not isinstance(comment_body, str):
-                            continue
-
-                        if len(comment_body) < 8000 or \
-                                self.token_handler.count_tokens(comment_body) < MAX_TOKENS[MODEL]:
-                            comment_record = Record(
-                                id=issue_key + ".comment_" + str(j + 1),
-                                text=comment_body,
-                                metadata=Metadata(repo=repo_name_for_index,
-                                                  username=username,
-                                                  created_at=created_at,
-                                                  level=IssueLevel.COMMENT)
-                            )
-                            corpus.append(comment_record)
-
+        corpus = self._build_issues_corpus(issues_list, repo_name_for_index)
         df = pd.DataFrame(corpus.model_dump()["documents"])
         get_logger().info('Done')
 
-        get_logger().info('Embedding...')
-        openai.api_key = get_settings().openai.key
-        list_to_encode = list(df["text"].values)
-        try:
-            res = openai.Embedding.create(input=list_to_encode, engine=MODEL)
-            embeds = [record['embedding'] for record in res['data']]
-        except Exception:
-            embeds = []
-            get_logger().error('Failed to embed entire list, embedding one by one...')
-            for i, text in enumerate(list_to_encode):
-                try:
-                    res = openai.Embedding.create(input=[text], engine=MODEL)
-                    embeds.append(res['data'][0]['embedding'])
-                except Exception:
-                    embeds.append([0] * 1536)
-        df["vector"] = embeds
+        df["vector"] = self._embed_corpus_texts(list(df["text"].values))
         get_logger().info('Done')
 
         get_logger().info('Upserting into Qdrant...')

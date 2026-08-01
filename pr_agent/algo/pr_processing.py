@@ -7,12 +7,13 @@ from github import RateLimitExceededException
 
 from pr_agent.algo.file_filter import filter_ignored
 from pr_agent.algo.git_patch_processing import (
-    extend_patch, handle_patch_deletions,
-    decouple_and_convert_to_hunks_with_lines_numbers)
+    decouple_and_convert_to_hunks_with_lines_numbers, extend_patch,
+    handle_patch_deletions)
 from pr_agent.algo.language_handler import sort_files_by_main_languages
 from pr_agent.algo.token_handler import TokenHandler
 from pr_agent.algo.types import EDIT_TYPE, FilePatchInfo
-from pr_agent.algo.utils import ModelType, clip_tokens, get_max_tokens, get_model
+from pr_agent.algo.utils import (ModelType, clip_tokens, get_max_tokens,
+                                 get_model)
 from pr_agent.config_loader import get_settings
 from pr_agent.git_providers.git_provider import GitProvider
 from pr_agent.log import get_logger
@@ -522,6 +523,23 @@ def add_ai_metadata_to_diff_files(git_provider, pr_description_files):
     except Exception as e:
         get_logger().error(f"Failed to add AI metadata to diff files: {e}",
                            artifact={"traceback": traceback.format_exc()})
+
+
+def apply_ai_metadata_if_enabled(git_provider, pr_description_files):
+    """
+    Enrich the diff files with AI metadata when it is available and enabled for an
+    auto command, otherwise disable the feature for the current request.
+
+    Shared by tools (e.g. review, code suggestions) that build their diff with the
+    optional AI metadata context.
+    """
+    if (pr_description_files and get_settings().get("config.is_auto_command", False) and
+            get_settings().get("config.enable_ai_metadata", False)):
+        add_ai_metadata_to_diff_files(git_provider, pr_description_files)
+        get_logger().debug(f"AI metadata added to the this command")
+    else:
+        get_settings().set("config.enable_ai_metadata", False)
+        get_logger().debug(f"AI metadata is disabled for this command")
 
 
 def add_ai_summary_top_patch(file, full_extended_patch):
