@@ -1,4 +1,4 @@
-from unittest.mock import Mock
+from unittest.mock import MagicMock, Mock
 
 import pytest
 
@@ -195,3 +195,46 @@ async def test_handle_request_returns_false_for_unknown_command(monkeypatch):
     handled = await pr_agent_module.PRAgent()._handle_request("https://example/pr/1", "/unknown")
 
     assert handled is False
+
+
+@pytest.mark.asyncio
+async def test_handle_request_returns_false_and_logs_on_tool_error(monkeypatch):
+    class FailingTool:
+        def __init__(self, pr_url, ai_handler, args):
+            pass
+
+        async def run(self):
+            raise RuntimeError("tool exploded")
+
+    _patch_request_dependencies(monkeypatch)
+    monkeypatch.setitem(pr_agent_module.command2class, "custom", FailingTool)
+
+    logged = []
+    fake_logger = MagicMock()
+    fake_logger.exception.side_effect = lambda msg, **kwargs: logged.append(msg)
+    monkeypatch.setattr(pr_agent_module, "get_logger", lambda: fake_logger)
+
+    handled = await pr_agent_module.PRAgent(ai_handler="fake-ai").handle_request(
+        "https://example/pr/1", "/custom"
+    )
+
+    assert handled is False
+    assert any("tool exploded" in msg for msg in logged)
+
+
+@pytest.mark.asyncio
+async def test_handle_request_does_not_swallow_keyboard_interrupt(monkeypatch):
+    class InterruptingTool:
+        def __init__(self, pr_url, ai_handler, args):
+            pass
+
+        async def run(self):
+            raise KeyboardInterrupt
+
+    _patch_request_dependencies(monkeypatch)
+    monkeypatch.setitem(pr_agent_module.command2class, "custom", InterruptingTool)
+
+    with pytest.raises(KeyboardInterrupt):
+        await pr_agent_module.PRAgent(ai_handler="fake-ai").handle_request(
+            "https://example/pr/1", "/custom"
+        )

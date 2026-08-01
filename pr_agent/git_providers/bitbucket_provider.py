@@ -15,7 +15,8 @@ from ..algo.language_handler import is_valid_file
 from ..algo.utils import find_line_number_of_relevant_line_in_file
 from ..config_loader import get_settings
 from ..log import get_logger
-from .git_provider import MAX_FILES_ALLOWED_FULL, GitProvider, get_cached_global_settings
+from .git_provider import (MAX_FILES_ALLOWED_FULL, GitProvider,
+                           get_cached_global_settings)
 
 
 def _gef_filename(diff):
@@ -46,7 +47,8 @@ class BitbucketProvider(GitProvider):
             elif self.auth_type == "bearer":
                 try:
                     self.bearer_token = context.get("bitbucket_bearer_token", None)
-                except:
+                except Exception:
+                    # no request-scoped context (e.g. CLI runs): fall back to the configured token
                     self.bearer_token = None
 
                 if not self.bearer_token:
@@ -248,7 +250,8 @@ class BitbucketProvider(GitProvider):
             self.git_files = [_gef_filename(diff) for diff in self.pr.diffstat()]
             context["git_files"] = self.git_files
             return self.git_files
-        except Exception:
+        except Exception as e:
+            get_logger().debug(f"Could not use the request context cache for git files: {e}")
             if not self.git_files:
                 self.git_files = [_gef_filename(diff) for diff in self.pr.diffstat()]
             return self.git_files
@@ -271,7 +274,7 @@ class BitbucketProvider(GitProvider):
 
                 })
             except Exception as e:
-                pass
+                get_logger().debug(f"Failed to log filtered [ignore] files: {e}")
 
         # get the pr patches
         try:
@@ -538,7 +541,8 @@ class BitbucketProvider(GitProvider):
             url_repo = f"https://api.bitbucket.org/2.0/repositories/{self.workspace_slug}/{self.repo_slug}/"
             response_repo = requests.request("GET", url_repo, headers=self.headers).json()
             return response_repo['mainbranch']['name']
-        except:
+        except Exception as e:
+            get_logger().warning(f"Failed to get the repo default branch, falling back to the PR destination branch: {e}")
             return self.pr.destination_branch
 
     def get_pr_owner_id(self) -> str | None:
@@ -607,7 +611,8 @@ class BitbucketProvider(GitProvider):
                 return ""
             contents = response.text
             return contents
-        except Exception:
+        except Exception as e:
+            get_logger().warning(f"Failed to get file content for '{file_path}' on branch '{branch}': {e}")
             return ""
 
     def create_or_update_pr_file(self, file_path: str, branch: str, contents="", message="") -> None:
@@ -635,7 +640,8 @@ class BitbucketProvider(GitProvider):
                 return ""
             contents = response.text
             return contents
-        except Exception:
+        except Exception as e:
+            get_logger().warning(f"Failed to get file content from '{remote_link}': {e}")
             return ""
 
     def get_commit_messages(self):
@@ -649,11 +655,9 @@ class BitbucketProvider(GitProvider):
         payload = json.dumps(payload_dict)
 
         response = requests.request("PUT", self.bitbucket_pull_request_api_url, headers=self.headers, data=payload)
-        try:
-            if response.status_code != 200:
-                get_logger().info(f"Failed to update description, error code: {response.status_code}")
-        except:
-            pass
+        if response.status_code != 200:
+            get_logger().error(f"Failed to update description, error code: {response.status_code}, "
+                               f"response: {response.text}")
         return response
 
     # bitbucket does not support labels

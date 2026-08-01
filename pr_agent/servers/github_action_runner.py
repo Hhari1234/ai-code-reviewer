@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+import sys
 from typing import Union
 
 from pr_agent.agent.pr_agent import PRAgent
@@ -89,23 +90,21 @@ async def run_action():
     GITHUB_TOKEN = os.environ.get('GITHUB_TOKEN')
     # get_settings().set("CONFIG.PUBLISH_OUTPUT_PROGRESS", False)
 
-    # Check if required environment variables are set
-    if not GITHUB_EVENT_NAME:
-        print("GITHUB_EVENT_NAME not set")
-        return
-    if not GITHUB_EVENT_PATH:
-        print("GITHUB_EVENT_PATH not set")
-        return
-    if not GITHUB_TOKEN:
-        print("GITHUB_TOKEN not set")
-        return
+    # Check if required environment variables are set. A missing one is a configuration error,
+    # so fail the action instead of exiting successfully without doing anything.
+    missing_env_vars = [name for name, value in (("GITHUB_EVENT_NAME", GITHUB_EVENT_NAME),
+                                                 ("GITHUB_EVENT_PATH", GITHUB_EVENT_PATH),
+                                                 ("GITHUB_TOKEN", GITHUB_TOKEN)) if not value]
+    if missing_env_vars:
+        get_logger().error(f"Required environment variable(s) not set: {', '.join(missing_env_vars)}")
+        sys.exit(1)
 
     # Set the environment variables in the settings
     if OPENAI_KEY:
         get_settings().set("OPENAI.KEY", OPENAI_KEY)
     else:
         # Might not be set if the user is using models not from OpenAI
-        print("OPENAI_KEY not set")
+        get_logger().info("OPENAI_KEY not set")
     if OPENAI_ORG:
         get_settings().set("OPENAI.ORG", OPENAI_ORG)
     get_settings().set("GITHUB.USER_TOKEN", GITHUB_TOKEN)
@@ -120,8 +119,8 @@ async def run_action():
         with open(GITHUB_EVENT_PATH, 'r') as f:
             event_payload = json.load(f)
     except json.decoder.JSONDecodeError as e:
-        print(f"Failed to parse JSON: {e}")
-        return
+        get_logger().error(f"Failed to parse the event payload at '{GITHUB_EVENT_PATH}': {e}")
+        sys.exit(1)
 
     try:
         get_logger().info("Applying repo settings")

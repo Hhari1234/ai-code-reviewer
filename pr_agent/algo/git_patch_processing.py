@@ -203,14 +203,14 @@ def check_if_hunk_lines_matches_to_file(i, original_lines, patch_lines, start1):
                         if original_line.encode(encoding).decode().strip() == patch_lines[i + 1].strip():
                             get_logger().info(f"Detected different encoding in hunk header line {start1}, needed encoding: {encoding}")
                             return False # we still want to avoid extending the hunk. But we don't want to log an error
-                    except:
-                        pass
+                    except Exception:
+                        continue  # this encoding does not apply, try the next one
 
                 is_valid_hunk = False
                 get_logger().info(
                     f"Invalid hunk in PR, line {start1} in hunk header doesn't match the original file content")
-    except:
-        pass
+    except Exception as e:
+        get_logger().debug(f"Failed to validate hunk header at line {start1}: {e}")
     return is_valid_hunk
 
 
@@ -221,7 +221,7 @@ def extract_hunk_headers(match):
             res[i] = 0
     try:
         start1, size1, start2, size2 = map(int, res[:4])
-    except:  # '@@ -0,0 +1 @@' case
+    except ValueError:  # '@@ -0,0 +1 @@' case
         start1, size1, size2 = map(int, res[:3])
         start2 = 0
     section_header = res[4]

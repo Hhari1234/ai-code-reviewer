@@ -790,7 +790,7 @@ def try_fix_yaml(response_text: str,
         data = yaml.safe_load('\n'.join(response_text_lines_copy))
         get_logger().info(f"Successfully parsed AI prediction after adding |-\n")
         return data
-    except:
+    except Exception:
         pass
 
     # 1.5 fallback - try to convert '|' to '|2'. Will solve cases of indent decreasing during the code
@@ -800,7 +800,7 @@ def try_fix_yaml(response_text: str,
         data = yaml.safe_load(response_text_copy)
         get_logger().info(f"Successfully parsed AI prediction after replacing | with |2")
         return data
-    except:
+    except Exception:
         # if it fails, we can try to add spaces to the lines that are not indented properly, and contain '}'.
         response_text_lines_copy = response_text_copy.split('\n')
         for i in range(0, len(response_text_lines_copy)):
@@ -811,7 +811,7 @@ def try_fix_yaml(response_text: str,
             data = yaml.safe_load('\n'.join(response_text_lines_copy))
             get_logger().info(f"Successfully parsed AI prediction after replacing | with |2 and adding spaces")
             return data
-        except:
+        except Exception:
             pass
 
     # second fallback - try to extract only range from first ```yaml to the last ```
@@ -836,7 +836,7 @@ def try_fix_yaml(response_text: str,
         data = yaml.safe_load(response_text_copy)
         get_logger().info(f"Successfully parsed AI prediction after removing curly brackets")
         return data
-    except:
+    except Exception:
         pass
 
 
@@ -857,7 +857,7 @@ def try_fix_yaml(response_text: str,
                 data = yaml.safe_load(response_text_copy)
                 get_logger().info(f"Successfully parsed AI prediction after extracting yaml snippet")
                 return data
-            except:
+            except Exception:
                 pass
 
     # fifth fallback - try to remove leading '+' (sometimes added by AI for 'existing code' and 'improved code')
@@ -869,7 +869,7 @@ def try_fix_yaml(response_text: str,
         data = yaml.safe_load('\n'.join(response_text_lines_copy))
         get_logger().info(f"Successfully parsed AI prediction after removing leading '+'")
         return data
-    except:
+    except Exception:
         pass
 
     # sixth fallback - replace tabs with spaces
@@ -880,7 +880,7 @@ def try_fix_yaml(response_text: str,
             data = yaml.safe_load(response_text_copy)
             get_logger().info(f"Successfully parsed AI prediction after replacing tabs with spaces")
             return data
-        except:
+        except Exception:
             pass
 
     # seventh fallback - add indent for sections of code blocks
@@ -903,7 +903,7 @@ def try_fix_yaml(response_text: str,
         data = yaml.safe_load(response_text_copy)
         get_logger().info(f"Successfully parsed AI prediction after adding indent for sections of code blocks")
         return data
-    except:
+    except Exception:
         pass
 
     # eighth fallback - try to remove pipe chars at the root-level dicts
@@ -913,7 +913,7 @@ def try_fix_yaml(response_text: str,
         data = yaml.safe_load(response_text_copy)
         get_logger().info(f"Successfully parsed AI prediction after removing pipe chars")
         return data
-    except:
+    except Exception:
         pass
 
     # ninth fallback - try to decode the response text with different encodings. GPT-5 can return text that is not utf-8 encoded.
@@ -924,7 +924,7 @@ def try_fix_yaml(response_text: str,
             if data:
                 get_logger().info(f"Successfully parsed AI prediction after decoding with {encoding} encoding")
                 return data
-        except:
+        except Exception:
             pass
 
     # # sixth fallback - try to remove last lines
@@ -1211,7 +1211,8 @@ def get_rate_limit_status(github_token) -> dict:
         if rate_limit_info.get('message') == 'Rate limiting is not enabled.':  # for github enterprise
             return {'resources': {}}
         response.raise_for_status()  # Check for HTTP errors
-    except:  # retry
+    except Exception as e:  # retry
+        get_logger().warning(f"Failed to get rate limit status, retrying: {e}")
         time.sleep(0.1)
         response = requests.get(RATE_LIMIT_URL, headers=HEADERS)
         return response.json()
@@ -1250,8 +1251,8 @@ def validate_and_await_rate_limit(github_token):
                     time.sleep(sleep_time_sec + 1)
                 rate_limit_status = get_rate_limit_status(github_token)
         return rate_limit_status
-    except:
-        get_logger().error("Error in rate limit")
+    except Exception as e:
+        get_logger().exception(f"Error in rate limit: {e}")
         return None
 
 

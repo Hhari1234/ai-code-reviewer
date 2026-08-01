@@ -38,8 +38,8 @@ class PRSimilarIssue:
                 import pandas as pd
                 import pinecone
                 from pinecone_datasets import Dataset, DatasetMetadata
-            except:
-                raise Exception("Please install 'pinecone' and 'pinecone_datasets' to use pinecone as vectordb")
+            except ImportError as e:
+                raise Exception("Please install 'pinecone' and 'pinecone_datasets' to use pinecone as vectordb") from e
             # assuming pinecone api key and environment are set in secrets file
             try:
                 api_key = get_settings().pinecone.api_key
@@ -113,8 +113,8 @@ class PRSimilarIssue:
         elif get_settings().pr_similar_issue.vectordb == "lancedb":
             try:
                 import lancedb  # import lancedb only if needed
-            except:
-                raise Exception("Please install lancedb to use lancedb as vectordb")
+            except ImportError as e:
+                raise Exception("Please install lancedb to use lancedb as vectordb") from e
             self.db = lancedb.connect(get_settings().lancedb.uri)
             self.table = None
 
@@ -262,7 +262,8 @@ class PRSimilarIssue:
             message = "The /similar_issue tool is currently supported only for GitHub."
             if get_settings().config.publish_output:
                 try:
-                    from pr_agent.git_providers import get_git_provider_with_context
+                    from pr_agent.git_providers import \
+                        get_git_provider_with_context
 
                     provider = get_git_provider_with_context(self.issue_url)
                     provider.publish_comment(message)
@@ -301,8 +302,8 @@ class PRSimilarIssue:
 
                 try:
                     issue_number = int(r["id"].split('.')[0].split('_')[-1])
-                except:
-                    get_logger().debug(f"Failed to parse issue number from {r['id']}")
+                except (ValueError, IndexError) as e:
+                    get_logger().warning(f"Failed to parse issue number from {r['id']}: {e}")
                     continue
 
                 if original_issue_number == issue_number:
@@ -326,8 +327,8 @@ class PRSimilarIssue:
 
                 try:
                     issue_number = int(r["id"].split('.')[0].split('_')[-1])
-                except:
-                    get_logger().debug(f"Failed to parse issue number from {r['id']}")
+                except (ValueError, IndexError) as e:
+                    get_logger().warning(f"Failed to parse issue number from {r['id']}: {e}")
                     continue
 
                 if original_issue_number == issue_number:
@@ -462,14 +463,15 @@ class PRSimilarIssue:
         try:
             res = openai.Embedding.create(input=list_to_encode, engine=MODEL)
             embeds = [record['embedding'] for record in res['data']]
-        except:
+        except Exception as e:
             embeds = []
-            get_logger().error('Failed to embed entire list, embedding one by one...')
+            get_logger().error(f'Failed to embed entire list, embedding one by one: {e}')
             for i, text in enumerate(list_to_encode):
                 try:
                     res = openai.Embedding.create(input=[text], engine=MODEL)
                     embeds.append(res['data'][0]['embedding'])
-                except:
+                except Exception as e:
+                    get_logger().warning(f'Failed to embed entry {i}, using a zero vector: {e}')
                     embeds.append([0] * 1536)
         df["values"] = embeds
         meta = DatasetMetadata.empty()
@@ -558,14 +560,15 @@ class PRSimilarIssue:
         try:
             res = openai.Embedding.create(input=list_to_encode, engine=MODEL)
             embeds = [record['embedding'] for record in res['data']]
-        except:
+        except Exception as e:
             embeds = []
-            get_logger().error('Failed to embed entire list, embedding one by one...')
+            get_logger().error(f'Failed to embed entire list, embedding one by one: {e}')
             for i, text in enumerate(list_to_encode):
                 try:
                     res = openai.Embedding.create(input=[text], engine=MODEL)
                     embeds.append(res['data'][0]['embedding'])
-                except:
+                except Exception as e:
+                    get_logger().warning(f'Failed to embed entry {i}, using a zero vector: {e}')
                     embeds.append([0] * 1536)
         df["vector"] = embeds
         get_logger().info('Done')
@@ -657,14 +660,15 @@ class PRSimilarIssue:
         try:
             res = openai.Embedding.create(input=list_to_encode, engine=MODEL)
             embeds = [record['embedding'] for record in res['data']]
-        except Exception:
+        except Exception as e:
             embeds = []
-            get_logger().error('Failed to embed entire list, embedding one by one...')
+            get_logger().error(f'Failed to embed entire list, embedding one by one: {e}')
             for i, text in enumerate(list_to_encode):
                 try:
                     res = openai.Embedding.create(input=[text], engine=MODEL)
                     embeds.append(res['data'][0]['embedding'])
-                except Exception:
+                except Exception as e:
+                    get_logger().warning(f'Failed to embed entry {i}, using a zero vector: {e}')
                     embeds.append([0] * 1536)
         df["vector"] = embeds
         get_logger().info('Done')

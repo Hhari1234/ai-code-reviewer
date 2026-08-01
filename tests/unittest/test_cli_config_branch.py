@@ -1,6 +1,8 @@
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from pr_agent import cli
 
 
@@ -94,3 +96,23 @@ def test_run_reconciles_config_branch_when_absent():
         cli.run(inargs=["--pr_url=https://github.com/a/b/pull/1", "review"])
 
     fake_settings.set.assert_any_call("CONFIG.CONFIG_BRANCH", None)
+
+
+def test_run_exits_non_zero_when_command_fails():
+    """A failed command must propagate as a non-zero exit code, not a silent success."""
+    fake_settings = SimpleNamespace(
+        litellm={},
+        set=MagicMock(),
+    )
+
+    async def fake_handle_request(*_args, **_kwargs):
+        return False
+
+    with patch("pr_agent.cli.get_settings", return_value=fake_settings), patch(
+        "pr_agent.cli.PRAgent",
+        return_value=SimpleNamespace(handle_request=fake_handle_request),
+    ):
+        with pytest.raises(SystemExit) as exc_info:
+            cli.run(inargs=["--pr_url=https://github.com/a/b/pull/1", "review"])
+
+    assert exc_info.value.code == 1

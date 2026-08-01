@@ -535,7 +535,8 @@ class GiteaProvider(GitProvider):
         try:
             pr_id = f"{self.repo}/{self.pr_number}"
             return pr_id
-        except:
+        except Exception as e:
+            self.logger.warning(f"Failed to get PR id: {e}")
             return ""
 
     def get_files(self) -> List[Dict[str, Any]]:
