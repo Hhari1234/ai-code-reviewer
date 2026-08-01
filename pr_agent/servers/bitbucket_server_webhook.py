@@ -5,7 +5,7 @@ import re
 from typing import List
 
 import uvicorn
-from fastapi import APIRouter, FastAPI
+from fastapi import APIRouter, FastAPI, HTTPException
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import RedirectResponse
 from starlette import status
@@ -45,22 +45,22 @@ def should_process_pr_logic(data) -> bool:
     try:
         pr_data = data.get("pullRequest", {})
         title = pr_data.get("title", "")
-        
+
         from_ref = pr_data.get("fromRef", {})
         source_branch = from_ref.get("displayId", "") if from_ref else ""
-        
+
         to_ref = pr_data.get("toRef", {})
         target_branch = to_ref.get("displayId", "") if to_ref else ""
-        
+
         author = pr_data.get("author", {})
         user = author.get("user", {}) if author else {}
         sender = user.get("name", "") if user else ""
-        
+
         repository = to_ref.get("repository", {}) if to_ref else {}
         project = repository.get("project", {}) if repository else {}
         project_key = project.get("key", "") if project else ""
         repo_slug = repository.get("slug", "") if repository else ""
-        
+
         repo_full_name = f"{project_key}/{repo_slug}" if project_key and repo_slug else ""
         pr_id = pr_data.get("id", None)
 
@@ -102,7 +102,8 @@ def should_process_pr_logic(data) -> bool:
         # Allow_only_specific_folders
         allowed_folders = get_settings().config.get("allow_only_specific_folders", [])
         if allowed_folders and pr_id and project_key and repo_slug:
-            from pr_agent.git_providers.bitbucket_server_provider import BitbucketServerProvider
+            from pr_agent.git_providers.bitbucket_server_provider import \
+                BitbucketServerProvider
             bitbucket_server_url = get_settings().get("BITBUCKET_SERVER.URL", "")
             pr_url = f"{bitbucket_server_url}/projects/{project_key}/repos/{repo_slug}/pull-requests/{pr_id}"
             provider = BitbucketServerProvider(pr_url=pr_url)
@@ -114,7 +115,7 @@ def should_process_pr_logic(data) -> bool:
                     if any(file_path.startswith(folder) for folder in allowed_folders):
                         all_files_outside = False
                         break
-                
+
                 if all_files_outside:
                     get_logger().info(f"Ignoring PR because all files {changed_files} are outside allowed folders {allowed_folders}")
                     return False
@@ -130,18 +131,21 @@ async def redirect_to_webhook():
 @router.post("/webhook")
 async def handle_webhook(background_tasks: BackgroundTasks, request: Request):
     log_context = {"server_type": "bitbucket_server"}
+    webhook_secret = get_settings().get("BITBUCKET_SERVER.WEBHOOK_SECRET", None)
+    if not webhook_secret:
+        get_logger().error("Bitbucket server webhook secret is not configured; rejecting request")
+        raise HTTPException(status_code=500, detail="Webhook secret is not configured")
+
+    body_bytes = await request.body()
+    if body_bytes.decode('utf-8') == '{"test": true}':
+        return JSONResponse(
+            status_code=status.HTTP_200_OK, content=jsonable_encoder({"message": "connection test successful"})
+        )
+    signature_header = request.headers.get("x-hub-signature", None)
+    verify_signature(body_bytes, webhook_secret, signature_header)
+
     data = await request.json()
     get_logger().info(json.dumps(data))
-
-    webhook_secret = get_settings().get("BITBUCKET_SERVER.WEBHOOK_SECRET", None)
-    if webhook_secret:
-        body_bytes = await request.body()
-        if body_bytes.decode('utf-8') == '{"test": true}':
-            return JSONResponse(
-                status_code=status.HTTP_200_OK, content=jsonable_encoder({"message": "connection test successful"})
-            )
-        signature_header = request.headers.get("x-hub-signature", None)
-        verify_signature(body_bytes, webhook_secret, signature_header)
 
     pr_id = data["pullRequest"]["id"]
     repository_name = data["pullRequest"]["toRef"]["repository"]["slug"]

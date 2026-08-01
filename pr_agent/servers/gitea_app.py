@@ -46,18 +46,23 @@ async def get_body(request: Request):
 
     # Verify webhook signature
     webhook_secret = getattr(get_settings().gitea, 'webhook_secret', None)
-    if webhook_secret:
-        body_bytes = await request.body()
-        signature_header = request.headers.get('x-gitea-signature', None)
-        if not signature_header:
-            get_logger().error("Missing signature header")
-            raise HTTPException(status_code=400, detail="Missing signature header")
+    if not webhook_secret:
+        get_logger().error("Gitea webhook secret is not configured; rejecting request")
+        raise HTTPException(status_code=500, detail="Webhook secret is not configured")
 
-        try:
-            verify_signature(body_bytes, webhook_secret, f"sha256={signature_header}")
-        except Exception as ex:
-            get_logger().error(f"Invalid signature: {ex}")
-            raise HTTPException(status_code=401, detail="Invalid signature")
+    body_bytes = await request.body()
+    signature_header = request.headers.get('x-gitea-signature', None)
+    if not signature_header:
+        get_logger().error("Missing signature header")
+        raise HTTPException(status_code=400, detail="Missing signature header")
+
+    try:
+        verify_signature(body_bytes, webhook_secret, f"sha256={signature_header}")
+    except HTTPException:
+        raise
+    except Exception as ex:
+        get_logger().error(f"Invalid signature: {ex}")
+        raise HTTPException(status_code=401, detail="Invalid signature")
 
     return body
 

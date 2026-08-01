@@ -56,8 +56,8 @@ async def handle_github_webhooks(background_tasks: BackgroundTasks, request: Req
 
 @router.post("/api/v1/marketplace_webhooks")
 async def handle_marketplace_webhooks(request: Request, response: Response):
-    body = await get_body(request)
-    get_logger().info(f'Request body:\n{body}')
+    await get_body(request)
+    return {}
 
 
 async def get_body(request):
@@ -67,10 +67,12 @@ async def get_body(request):
         get_logger().error("Error parsing request body", artifact={'error': e})
         raise HTTPException(status_code=400, detail="Error parsing request body") from e
     webhook_secret = getattr(get_settings().github, 'webhook_secret', None)
-    if webhook_secret:
-        body_bytes = await request.body()
-        signature_header = request.headers.get('x-hub-signature-256', None)
-        verify_signature(body_bytes, webhook_secret, signature_header)
+    if not webhook_secret:
+        get_logger().error("GitHub webhook secret is not configured; rejecting request")
+        raise HTTPException(status_code=500, detail="Webhook secret is not configured")
+    body_bytes = await request.body()
+    signature_header = request.headers.get('x-hub-signature-256', None)
+    verify_signature(body_bytes, webhook_secret, signature_header)
     return body
 
 
