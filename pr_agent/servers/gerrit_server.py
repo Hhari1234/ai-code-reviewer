@@ -1,9 +1,10 @@
 import copy
+import secrets
 from enum import Enum
 from json import JSONDecodeError
 
 import uvicorn
-from fastapi import APIRouter, FastAPI, HTTPException
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
 from pydantic import BaseModel
 from starlette.middleware import Middleware
 from starlette_context import context
@@ -32,7 +33,19 @@ class Item(BaseModel):
     msg: str
 
 
-@router.post("/api/v1/gerrit/{action}")
+def authorize(request: Request):
+    """Reject requests that do not carry the configured shared secret."""
+    expected = get_settings().get("GERRIT.AUTH_TOKEN", None)
+    if not expected:
+        get_logger().error("gerrit.auth_token is not configured; rejecting request")
+        raise HTTPException(status_code=500, detail="Server auth token is not configured")
+    header = request.headers.get("authorization", "")
+    scheme, _, provided = header.partition(" ")
+    if scheme.lower() != "bearer" or not secrets.compare_digest(provided, str(expected)):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+
+@router.post("/api/v1/gerrit/{action}", dependencies=[Depends(authorize)])
 async def handle_gerrit_request(action: Action, item: Item):
     get_logger().debug("Received a Gerrit request")
     context["settings"] = copy.deepcopy(global_settings)

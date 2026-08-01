@@ -333,6 +333,8 @@ avoid_full_files = false
 # patch_server_endpoint = "http://127.0.0.1:5000/patch"
 # token to authenticate in the patch server
 # patch_server_token = ""
+# shared secret required in the "Authorization: Bearer <token>" header of gerrit server requests
+# auth_token = ""
 
 [bitbucket_server]
 # URL to the BitBucket Server instance
