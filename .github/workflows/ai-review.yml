@@ -26,6 +26,14 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Run Gemini diagnostic probe
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          pip install httpx
+          python gemini_probe.py
+
       - name: Run AI review
         env:
           PYTHONPATH: ${{ github.workspace }}
