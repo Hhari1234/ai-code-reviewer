@@ -38,6 +38,7 @@ jobs:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.build-mode }}
           queries: security-extended,security-and-quality
+          config: ./.github/workflows/codeql-config.yml
 
       - uses: github/codeql-action/analyze@7fd177fa680c9881b53cdab4d346d32574c9f7f4  # v3.35.4
         with:

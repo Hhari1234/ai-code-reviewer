@@ -54,7 +54,7 @@ ai-code-reviewer = "reviewer.cli:main"
 [tool.ruff]
 line-length = 120
 
-exclude = ["tests"]
+exclude = ["tests", "pr_agent"]
 
 # Limit lint checks to import-order/isort-related checks to avoid test-only and environment-specific lints during CI E2E verification
 lint.select = [
@@ -71,7 +71,7 @@ lint.unfixable = [
   "B", # Avoid trying to fix flake8-bugbear (`B`) violations.
 ]
 
-lint.exclude = ["api/code_completions", "tests"]
+lint.exclude = ["api/code_completions", "tests", "pr_agent"]
 
 lint.ignore = ["E999", "B008"]
 
