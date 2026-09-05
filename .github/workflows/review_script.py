@@ -4,6 +4,7 @@ import sys
 from reviewer.analyzer import ReviewEngine
 from reviewer.llm_client import GeminiClient
 from reviewer.config import ReviewSettings
+from reviewer.github_client import GitHubClient
 
 repo = os.getenv('GITHUB_REPOSITORY', '')
 pr_number = os.getenv('PR_NUMBER', '')
