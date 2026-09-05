@@ -25,6 +25,23 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Set up Gemini client
+        run: |
+          python -c "
+import os
+from reviewer.llm_client import GeminiClient
+from reviewer.config import ReviewSettings
+
+api_key = os.environ.get('GEMINI_API_KEY', '')
+if not api_key:
+    print('WARNING: GEMINI_API_KEY not set, review will use static analysis only')
+    llm_client = None
+else:
+    settings = ReviewSettings()
+    llm_client = GeminiClient(api_key=api_key, model=settings.gemini_model)
+print('llm_client ready:', 'YES' if llm_client else 'NO')
+" 2>&1 | tail -1
+
       - name: Run AI review
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -37,8 +54,8 @@ import os
 import sys
 
 from reviewer.analyzer import ReviewEngine
-from reviewer.diff_parser import DiffParser
-from reviewer.github_client import GitHubClient
+from reviewer.llm_client import GeminiClient
+from reviewer.config import ReviewSettings
 
 repo = os.getenv('GITHUB_REPOSITORY', '')
 pr_number = os.getenv('PR_NUMBER', '')
@@ -47,12 +64,24 @@ if not repo or not pr_number:
     sys.exit(0)
 
 owner, repo_name = repo.split('/', 1)
-client = GitHubClient(token=os.getenv('GITHUB_TOKEN', ''))
+github_token = os.getenv('GITHUB_TOKEN', '')
+
+# Create Gemini client from GitHub Actions secret
+api_key = os.getenv('GEMINI_API_KEY', '')
+if api_key:
+    settings = ReviewSettings()
+    llm_client = GeminiClient(api_key=api_key, model=settings.gemini_model)
+else:
+    llm_client = None
+    print('WARNING: GEMINI_API_KEY not set; review will use static analysis only')
+
+client = GitHubClient(token=github_token)
 files = client.get_changed_files(owner, repo_name, int(pr_number))
 paths = [entry.get('filename', '') for entry in files]
 raw_diff = client.get_diff(owner, repo_name, int(pr_number))
 filtered_paths = DiffParser.filter_irrelevant_files(paths)
-engine = ReviewEngine()
+
+engine = ReviewEngine(llm_client=llm_client)
 result = engine.analyze_diff(raw_diff, filtered_paths)
 summary = result.summary
 if result.findings:
