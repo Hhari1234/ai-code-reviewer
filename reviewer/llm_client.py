@@ -71,7 +71,7 @@ class GeminiClient:
     MAX_BACKOFF = 10.0
 
     def __init__(self, api_key: str, model: str = "gemini-3.8-flash") -> None:
-        self.api_key = api_key
+        self.api_key = api_key.strip() if api_key else ""
         self.model = model
 
     def _do_generate(self, prompt: str) -> dict[str, Any]:
