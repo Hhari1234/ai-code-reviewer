@@ -23,6 +23,6 @@ jobs:
       - name: Run ruff
         run: ruff check .
       - name: Run tests
-        run: PYTHONPATH=. pytest tests/unit -q
+        run: PYTHONPATH=. pytest tests/unittest -q
       - name: Run bandit
         run: bandit -r reviewer api -q
