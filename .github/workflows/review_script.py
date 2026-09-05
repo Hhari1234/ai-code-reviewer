@@ -2,6 +2,7 @@ import os
 import sys
 
 from reviewer.analyzer import ReviewEngine
+from reviewer.diff_parser import DiffParser
 from reviewer.llm_client import GeminiClient
 from reviewer.config import ReviewSettings
 from reviewer.github_client import GitHubClient
