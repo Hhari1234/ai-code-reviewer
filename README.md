@@ -17,7 +17,7 @@ This repository combines the upstream PR-Agent review engine with an original en
 - Structured review findings with severity and category classification
 - Duplicate-finding prevention and summary generation
 - Gemini-based analysis abstraction
-- GitHub Actions automation for PR review
+- GitHub Actions automation for PR review (Gemini-powered AI analysis).
 - Dockerized local execution
 - Automated unit test coverage for review core logic
 
