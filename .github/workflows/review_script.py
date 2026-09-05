@@ -2,10 +2,10 @@ import os
 import sys
 
 from reviewer.analyzer import ReviewEngine
-from reviewer.diff_parser import DiffParser
-from reviewer.llm_client import GeminiClient
 from reviewer.config import ReviewSettings
+from reviewer.diff_parser import DiffParser
 from reviewer.github_client import GitHubClient
+from reviewer.llm_client import GeminiClient
 
 repo = os.getenv('GITHUB_REPOSITORY', '')
 pr_number = os.getenv('PR_NUMBER', '')

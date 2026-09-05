@@ -4,9 +4,10 @@ Sends ONLY the minimal request (contents/parts/text) with no extra
 generation parameters. Compares with the application's full prompt request.
 Never prints the API key.
 """
+import json
 import os
 import sys
-import json
+
 import httpx
 
 MODEL = "gemini-3.8-flash"
