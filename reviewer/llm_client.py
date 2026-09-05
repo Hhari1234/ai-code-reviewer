@@ -62,7 +62,62 @@ class GeminiClient:
         if not text:
             raise InvalidLLMResponseError("Empty response from Gemini")
 
+        # Try to extract JSON from the response, handling potential markdown code blocks
+        parsed = self._extract_json_from_text(text)
+        if parsed is None:
+            raise InvalidLLMResponseError("Gemini returned unparseable response")
+
+        return parsed
+
+    @staticmethod
+    def _extract_json_from_text(text: str) -> dict[str, Any] | None:
+        """Extract a JSON object from Gemini's response text.
+
+        Gemini may return text with markdown fences (```json ... ```) or surrounding
+        prose. This method safely extracts the JSON object regardless.
+        """
+        s = text.strip()
+
+        # Remove ```json ... ``` or ``` ... ``` code fences if present
+        if s.startswith("```"):
+            # Find the end fence
+            lines = s.splitlines()
+            # Remove leading fence
+            if len(lines) > 1 and lines[1].strip().startswith("json"):
+                # Has ```json ``` fence - extract content between fences
+                # Find the closing fence
+                in_fence = True
+                result_lines = []
+                for line in lines[2:]:
+                    if line.strip() == "```":
+                        in_fence = False
+                        break
+                    result_lines.append(line)
+                if not in_fence:
+                    s = "\n".join(result_lines).strip()
+
+        # Try to find the innermost JSON object
+        # Strategy: try direct parse first, then search for JSON object
         try:
-            return json.loads(text)
-        except json.JSONDecodeError as exc:
-            raise InvalidLLMResponseError("Gemini returned malformed JSON") from exc
+            return json.loads(s)
+        except json.JSONDecodeError:
+            pass
+
+        # If direct parse failed, search for a JSON object within the text
+        # Try progressively smaller substrings from the center outward
+        for start in range(len(s)):
+            for end in range(len(s), start, -1):
+                candidate = s[start:end]
+                # Quick check: must start with { and end with }
+                if not candidate.startswith("{"):
+                    continue
+                if not candidate.endswith("}"):
+                    continue
+                try:
+                    parsed = json.loads(candidate)
+                    if isinstance(parsed, dict):
+                        return parsed
+                except json.JSONDecodeError:
+                    continue
+
+        return None

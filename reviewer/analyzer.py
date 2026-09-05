@@ -60,7 +60,16 @@ class ReviewEngine:
     def _build_prompt(self, diff_text: str, file_paths: list[str]) -> str:
         trimmed = diff_text[:60000]
         return (
-            "Review this pull request diff and return strict JSON with keys 'findings' and 'summary'. "
+            "You are an expert code reviewer. Return STRICT JSON ONLY with two keys: "
+            "'findings' (array of objects) and 'summary' (string). "
+            "Do NOT include any markdown code fences, explanations, or prose outside the JSON. "
+            "Do NOT return any text before or after the JSON object. "
+            "The JSON must be valid and parseable by json.loads() directly.\n\n"
+            "Each finding object must have these exact keys: file, line, severity, category, title, description, recommendation.\n\n"
+            "Return JSON in this exact format (NO markdown, NO fences, just the JSON object):\n"
+            "{\"findings\": [{\"file\": \"path/to/file.py\", \"line\": 42, \"severity\": \"high\", \"category\": \"security\", \"title\": \"XSS vulnerability\", \"description\": \"User input not sanitized\", \"recommendation\": \"Sanitize user input before rendering\"}], "
+            "summary\": \"Found 1 security issue\"}\n\n"
+            f"Review this pull request diff and return the JSON strictly as specified above.\n\n"
             f"Files considered: {file_paths or 'none'}.\n\n{trimmed}"
         )
 
