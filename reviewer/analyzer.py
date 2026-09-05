@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections import Counter
 
 from .diff_parser import DiffParser
@@ -8,6 +9,8 @@ from .llm_client import GeminiClient, InvalidLLMResponseError, LLMResponseParser
 from .models import Finding, ReviewResult, ReviewSummary
 from .security import SecurityAnalyzer
 from .severity import Severity, classify_severity
+
+logger = logging.getLogger(__name__)
 
 
 class ReviewEngine:
@@ -40,8 +43,11 @@ class ReviewEngine:
                 payload = self.llm_client.generate(prompt)
                 parsed = LLMResponseParser.parse(payload)
                 findings.extend(parsed.findings)
-            except InvalidLLMResponseError:
-                pass
+            except InvalidLLMResponseError as exc:
+                logger.warning(
+                    "LLM response invalid: %s. Continuing review without LLM findings.",
+                    exc,
+                )
 
         deduped = self._dedupe_findings(findings)
         summary = self._build_summary(deduped)
