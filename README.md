@@ -1,78 +1,172 @@
--> AI Code Review Agent (PR-Agent)
+# AI Code Reviewer — GitHub-Native AI Code Review & Security Assistant
 
-A locally-hosted, AI-powered code review agent that automatically analyzes GitHub pull requests and posts structured feedback — summaries, review comments, and improvement suggestions — directly on the PR.
+One-line description: A GitHub-native AI code review system that analyzes pull requests using Python, a review orchestration layer, Gemini-backed LLM reasoning, and structured classification for security, quality, and performance issues.
 
-Built on top of the open-source [PR-Agent](https://github.com/The-PR-Agent/pr-agent) project, configured to run entirely on a local machine and integrated with the Google Gemini API for free, zero-cost inference.
+![CI](https://img.shields.io/badge/CI-configured-blue)
+![Python](https://img.shields.io/badge/Python-3.12-blue)
+![License](https://img.shields.io/badge/License-MIT-green)
 
-->-> What it does
+## Demo
 
-- **`review`** — Analyzes a pull request's diff and posts a structured code review (findings, security concerns, effort estimate) as a PR comment
-- **`describe`** — Auto-generates a PR title and summary based on the actual code changes
-- **`improve`** — Suggests specific, actionable code improvements as inline comments
-- **`ask`** — Answers free-text questions about what a PR changes
+This repository combines the upstream PR-Agent review engine with an original engineering layer that normalizes GitHub diffs, filters noisy/generated files, classifies findings by severity, and emits structured review summaries back into GitHub workflows.
 
--> Tech stack
+## Features
 
-- **Python 3.12** — core runtime
-- **PR-Agent** — open-source PR review engine
-- **LiteLLM** — unified interface for routing requests to different LLM providers
-- **Google Gemini API** (`gemini-3.6-flash`) — free-tier LLM inference
-- **GitHub REST API** — for fetching PR diffs and posting review comments
-- **Rust + MSVC Build Tools** — required to compile native extensions used by LiteLLM on Windows
+- GitHub PR metadata and diff retrieval
+- Security-first static review heuristics
+- Structured review findings with severity and category classification
+- Duplicate-finding prevention and summary generation
+- Gemini-based analysis abstraction
+- GitHub Actions automation for PR review
+- Dockerized local execution
+- Automated unit test coverage for review core logic
 
-->-> Setup
+## Architecture
 
-->->-> Prerequisites
-- Python 3.12+
-- [Rust](https://rustup.rs/) (for compiling native dependencies)
-- [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) with "Desktop development with C++" workload (Windows only)
-- A [GitHub personal access token](https://github.com/settings/tokens) with `repo` scope
-- A free [Google Gemini API key](https://aistudio.google.com/apikey)
+The project retains the useful upstream PR-Agent functionality but adds a clear original review layer around it:
 
-->->-> Installation
+- GitHub client layer for repository metadata and review submission
+- Diff parsing and file filtering
+- Security and quality analyzers
+- LLM abstraction for Gemini and future providers
+- Structured review models and formatting
+- CI and GitHub Action integration
+
+## Tech stack
+
+- Python 3.12
+- PR-Agent foundation for PR review execution
+- GitHub REST API
+- Google Gemini via HTTPX
+- FastAPI for lightweight API endpoints
+- Pytest for automated validation
+- Docker and GitHub Actions for automation
+
+## How it works
+
+1. A pull request is opened or updated.
+2. The GitHub client fetches PR metadata and files.
+3. The diff parser extracts changed hunks and filters irrelevant files.
+4. Local security and quality heuristics inspect the patch.
+5. An LLM layer can analyze the diff for nuanced findings.
+6. Findings are deduplicated and classified by severity.
+7. A summary is emitted to the GitHub review flow.
+
+## Installation
 
 ```bash
 git clone https://github.com/Hhari1234/ai-code-reviewer.git
 cd ai-code-reviewer
-pip install -e .
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+pip install -r requirements-dev.txt
 ```
 
-->->-> Configuration
+## Environment variables
 
-Credentials are kept out of version control via environment variables and a gitignored local settings file.
-
-**Option A — Environment variables:**
-```bash
-setx GITHUB_TOKEN "your_github_token_here"
-setx GEMINI_API_KEY "your_gemini_key_here"
-```
-
-**Option B — Local secrets file** (copy the template, fill in your own keys):
-```bash
-cp pr_agent/settings/.secrets_template.toml pr_agent/settings/.secrets.toml
--> then edit .secrets.toml with your own keys
-```
-> `.secrets.toml` is excluded via `.gitignore` and never committed.
-
-->->-> Usage
+Copy and populate the environment template:
 
 ```bash
-pr-agent --pr_url <PR_URL> review --config.model="gemini/gemini-3.6-flash" --config.fallback_models=[]
+cp .env.example .env
 ```
 
-Replace `<PR_URL>` with any real GitHub pull request URL, e.g.:
+Supported configuration:
+
+- `GITHUB_TOKEN`
+- `GITHUB_API_URL`
+- `GEMINI_API_KEY`
+- `GEMINI_MODEL`
+- `MAX_DIFF_CHARS`
+- `MAX_FILES`
+- `LOG_LEVEL`
+
+## Local usage
+
 ```bash
-pr-agent --pr_url https://github.com/owner/repo/pull/123 review --config.model="gemini/gemini-3.6-flash" --config.fallback_models=[]
+$env:PYTHONPATH='.'
+python -m reviewer.cli --diff sample.patch
+pytest tests/unit -q
 ```
 
-Swap `review` for `describe`, `improve`, or `ask "your question"` to run other tools.
+## GitHub Actions setup
 
-->-> Notable setup challenges solved
+The repository includes a workflow in `.github/workflows/ai-review.yml` that triggers on pull request `opened`, `synchronize`, and `reopened` events. It installs dependencies, fetches the diff, analyzes it, and posts a review summary using GitHub and Gemini secrets.
 
-- Diagnosed and resolved a native-extension build failure (`litellm` requires compiling Rust code via `maturin`/`pyo3`) by installing the Rust toolchain and MSVC Build Tools on Windows
-- Migrated from OpenAI to Google Gemini as the inference provider to avoid billing dependency, using LiteLLM's model-routing layer
-- Implemented secure credential handling to prevent API key leakage into version control
+## Example PR review
 
-->-> License
+See [docs/example-review.md](docs/example-review.md).
 
-This project builds on [PR-Agent](https://github.com/The-PR-Agent/pr-agent), licensed under MIT.
+## Example findings
+
+- Hardcoded API key or secret detection
+- Potential SQL injection pattern
+- Command injection via `shell=True`
+- Missing authorization or validation checks
+
+## Supported review categories
+
+- BUG
+- SECURITY
+- PERFORMANCE
+- CODE_QUALITY
+- MAINTAINABILITY
+- TESTING
+- ARCHITECTURE
+- STYLE
+
+## Testing
+
+```bash
+PYTHONPATH=. pytest tests/unit -q
+```
+
+## Docker
+
+```bash
+docker build -t ai-code-reviewer .
+docker run -p 8000:8000 ai-code-reviewer
+```
+
+## Security
+
+- Secrets are never committed to source control.
+- GitHub tokens and API keys are expected from environment variables or GitHub Actions Secrets.
+- Logging avoids printing credentials or tokens.
+- Action permissions are intentionally narrow.
+
+## Limitations
+
+- The project uses heuristic checks for common patterns, so it is advisory rather than a static-analysis guarantee.
+- Large diffs are deliberately truncated for cost control.
+- Line-level GitHub comments require a deeper review integration than the scaffold implemented here.
+
+## Future improvements
+
+- Add richer PR comment mapping to exact file/line references
+- Add provider abstraction beyond Gemini
+- Expand static-analysis rule coverage
+- Persist review state to suppress duplicate comments across update cycles
+
+## Project structure
+
+```text
+ai-code-reviewer/
+├── reviewer/
+├── api/
+├── docs/
+├── tests/
+├── .github/workflows/
+├── .env.example
+├── Dockerfile
+├── docker-compose.yml
+├── README.md
+├── pyproject.toml
+└── LICENSE
+```
+
+## License
+
+MIT
+
+> This repository retains the valuable upstream PR-Agent foundation for pull-request review execution, while the original engineering layer adds GitHub-native orchestration, structured findings, security-first logic, and production-oriented automation around that upstream base.
