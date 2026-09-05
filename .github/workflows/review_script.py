@@ -17,7 +17,7 @@ owner, repo_name = repo.split('/', 1)
 github_token = os.getenv('GITHUB_TOKEN', '')
 
 # Create Gemini client from GitHub Actions secret
-api_key = os.getenv('GEMINI_API_KEY', '')
+api_key = os.getenv('GEMINI_API_KEY', '').strip()
 if api_key:
     settings = ReviewSettings()
     llm_client = GeminiClient(api_key=api_key, model=settings.gemini_model)

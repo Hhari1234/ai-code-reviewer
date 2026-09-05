@@ -30,7 +30,7 @@ class ReviewSettings:
         return cls(
             github_token=os.getenv("GITHUB_TOKEN", ""),
             github_base_url=os.getenv("GITHUB_API_URL", "https://api.github.com"),
-            gemini_api_key=os.getenv("GEMINI_API_KEY", ""),
+            gemini_api_key=os.getenv("GEMINI_API_KEY", "").strip(),
             gemini_model=os.getenv("GEMINI_MODEL", "gemini-3.8-flash"),
             max_diff_chars=int(os.getenv("MAX_DIFF_CHARS", "60000")),
             max_files=int(os.getenv("MAX_FILES", "30")),
