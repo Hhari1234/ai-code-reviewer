@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 from typing import Any
 
 import httpx
@@ -10,6 +11,27 @@ from .models import Finding
 
 class InvalidLLMResponseError(ValueError):
     pass
+
+
+class GeminiAPIError(ValueError):
+    """Raised when Gemini API request fails after all retries."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        model: str,
+        attempts: int,
+        last_error: Exception | None = None,
+    ) -> None:
+        self.message = message
+        self.model = model
+        self.attempts = attempts
+        self.last_error = last_error
+        super().__init__(self.message)
+
+    def __str__(self) -> str:
+        return f"GeminiAPIError(model={self.model}, attempts={self.attempts}): {self.message}"
 
 
 class LLMResponseParser:
@@ -41,14 +63,23 @@ class LLMReviewResult:
 
 
 class GeminiClient:
+    #: Maximum number of retry attempts for transient failures
+    MAX_RETRIES = 3
+    #: Initial backoff delay in seconds, will grow exponentially
+    INITIAL_BACKOFF = 1.0
+    #: Maximum backoff delay in seconds
+    MAX_BACKOFF = 10.0
+
     def __init__(self, api_key: str, model: str = "gemini-3.8-flash") -> None:
         self.api_key = api_key
         self.model = model
 
-    def generate(self, prompt: str) -> dict[str, Any]:
-        if not self.api_key:
-            raise ValueError("GEMINI_API_KEY is required")
+    def _do_generate(self, prompt: str) -> dict[str, Any]:
+        """Single attempt to generate from Gemini without retry logic.
 
+        Raises httpx.HTTPError for HTTP problems or InvalidLLMResponseError
+        if the response cannot be parsed as valid JSON findings.
+        """
         url = "https://generativelanguage.googleapis.com/v1beta/models/" + self.model + ":generateContent"
         response = httpx.post(
             url,
@@ -68,6 +99,73 @@ class GeminiClient:
             raise InvalidLLMResponseError("Gemini returned unparseable response")
 
         return parsed
+
+    def generate(self, prompt: str) -> dict[str, Any]:
+        if not self.api_key:
+            raise ValueError("GEMINI_API_KEY is required")
+
+        retryable_status_codes = {429, 500, 502, 503, 504}
+        last_error: Exception | None = None
+
+        for attempt in range(1, self.MAX_RETRIES + 1):
+            try:
+                return self._do_generate(prompt)
+            except (httpx.HTTPError, InvalidLLMResponseError) as exc:
+                last_error = exc
+
+                # Check if this is a retryable HTTP status code
+                http_exc = None
+                if isinstance(exc, httpx.HTTPStatusError):
+                    http_exc = exc
+                    if http_exc.response.status_code not in retryable_status_codes:
+                        # Permanent error - fail immediately
+                        raise
+                elif isinstance(exc, httpx.TimeoutException):
+                    # Timeout is retryable
+                    pass
+                elif isinstance(exc, httpx.ConnectError):
+                    # Connection error is retryable
+                    pass
+
+                # If this was the last attempt, raise the last error
+                if attempt >= self.MAX_RETRIES:
+                    break
+
+                # Calculate backoff delay with exponential growth and jitter
+                backoff = min(self.INITIAL_BACKOFF * (2 ** (attempt - 1)), self.MAX_BACKOFF)
+                # Add small jitter to avoid thundering herd
+                jitter = 0.1 * backoff * (0.5 + attempt * 0.1)
+                delay = backoff + jitter
+
+                # Check for Retry-After header
+                if http_exc is not None and http_exc.response is not None:
+                    retry_after = http_exc.response.headers.get("Retry-After")
+                    if retry_after is not None:
+                        try:
+                            delay = float(retry_after)
+                        except (ValueError, TypeError):
+                            pass
+
+                # Log retry information safely (no secrets)
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.warning(
+                    "Gemini request attempt %d/%d failed: %s; retrying in %.1fs",
+                    attempt,
+                    self.MAX_RETRIES,
+                    http_exc.response.status_code if http_exc else type(exc).__name__,
+                    delay,
+                )
+
+                time.sleep(delay)
+
+        # All retries exhausted - raise clear error
+        raise GeminiAPIError(
+            f"Gemini API request failed after {self.MAX_RETRIES} attempts",
+            model=self.model,
+            attempts=self.MAX_RETRIES,
+            last_error=last_error,
+        )
 
     @staticmethod
     def _extract_json_from_text(text: str) -> dict[str, Any] | None:
