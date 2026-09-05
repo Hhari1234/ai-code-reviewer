@@ -41,7 +41,7 @@ class LLMReviewResult:
 
 
 class GeminiClient:
-    def __init__(self, api_key: str, model: str = "gemini-2.0-flash") -> None:
+    def __init__(self, api_key: str, model: str = "gemini-3.5-flash") -> None:
         self.api_key = api_key
         self.model = model
 
