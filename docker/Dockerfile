@@ -47,6 +47,9 @@ FROM base AS test
 ADD requirements-dev.txt .
 RUN pip install --no-cache-dir -r requirements-dev.txt && rm requirements-dev.txt
 ADD pr_agent pr_agent
+ADD reviewer reviewer
+ADD api api
+ADD gemini_probe.py gemini_probe.py
 ADD tests tests
 ADD docker/mosaico docker/mosaico
 
