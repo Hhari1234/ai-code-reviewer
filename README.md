@@ -1,78 +1,170 @@
--> AI Code Review Agent (PR-Agent)
+# AI Code Reviewer
 
-A locally-hosted, AI-powered code review agent that automatically analyzes GitHub pull requests and posts structured feedback — summaries, review comments, and improvement suggestions — directly on the PR.
+An automated AI-powered GitHub pull-request code review system that analyzes PR diffs using **Gemini 3.8 Flash** and posts structured review findings directly to GitHub.
 
-Built on top of the open-source [PR-Agent](https://github.com/The-PR-Agent/pr-agent) project, configured to run entirely on a local machine and integrated with the Google Gemini API for free, zero-cost inference.
+## Demo
 
-->-> What it does
+See the verified E2E demo in [PR #5](https://github.com/Hhari1234/ai-code-reviewer/pull/5).
 
-- **`review`** — Analyzes a pull request's diff and posts a structured code review (findings, security concerns, effort estimate) as a PR comment
-- **`describe`** — Auto-generates a PR title and summary based on the actual code changes
-- **`improve`** — Suggests specific, actionable code improvements as inline comments
-- **`ask`** — Answers free-text questions about what a PR changes
+## Architecture
 
--> Tech stack
+```
+Developer opens PR
+       ↓
+GitHub Actions
+       ↓
+Diff extraction
+       ↓
+Static/security analysis
+       ↓
+Gemini 3.8 Flash
+       ↓
+Structured JSON response
+       ↓
+Finding validation/parsing
+       ↓
+GitHub PR review
+```
 
-- **Python 3.12** — core runtime
-- **PR-Agent** — open-source PR review engine
-- **LiteLLM** — unified interface for routing requests to different LLM providers
-- **Google Gemini API** (`gemini-3.6-flash`) — free-tier LLM inference
-- **GitHub REST API** — for fetching PR diffs and posting review comments
-- **Rust + MSVC Build Tools** — required to compile native extensions used by LiteLLM on Windows
+## Features
 
-->-> Setup
+- Gemini-powered code review using Gemini 3.8 Flash
+- GitHub Actions integration for automated PR review
+- GitHub REST API integration for diff fetching and review posting
+- Structured findings with severity classification (CRITICAL, HIGH, MEDIUM, LOW, INFO)
+- Security analysis for common vulnerabilities (hardcoded secrets, SQL injection, command injection)
+- Diff parsing with irrelevant file filtering
+- LLM response validation and parsing
+- Retry and backoff handling for transient API failures
+- Graceful error handling
+- CLI support for local execution
 
-->->-> Prerequisites
+## Technology Stack
+
+- Python 3.12
+- Gemini 3.8 Flash (Google AI)
+- GitHub Actions
+- GitHub REST API
+- HTTPX for API calls
+- Pytest for testing
+- Ruff for linting
+
+## Setup
+
+### Prerequisites
+
 - Python 3.12+
-- [Rust](https://rustup.rs/) (for compiling native dependencies)
-- [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) with "Desktop development with C++" workload (Windows only)
-- A [GitHub personal access token](https://github.com/settings/tokens) with `repo` scope
-- A free [Google Gemini API key](https://aistudio.google.com/apikey)
+- A Google Gemini API key
 
-->->-> Installation
+### Environment Variables
+
+Create a `.env` file or set these environment variables:
+
+```bash
+# Required
+GEMINI_API_KEY=your_gemini_api_key_here
+
+# Optional - defaults to gemini-3.8-flash
+GEMINI_MODEL=gemini-3.8-flash
+
+# Optional
+GITHUB_TOKEN=your_github_token_here
+LOG_LEVEL=INFO
+MAX_DIFF_CHARS=60000
+MAX_FILES=100
+```
+
+### Installation
 
 ```bash
 git clone https://github.com/Hhari1234/ai-code-reviewer.git
 cd ai-code-reviewer
-pip install -e .
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+pip install -r requirements.txt
 ```
 
-->->-> Configuration
-
-Credentials are kept out of version control via environment variables and a gitignored local settings file.
-
-**Option A — Environment variables:**
-```bash
-setx GITHUB_TOKEN "your_github_token_here"
-setx GEMINI_API_KEY "your_gemini_key_here"
-```
-
-**Option B — Local secrets file** (copy the template, fill in your own keys):
-```bash
-cp pr_agent/settings/.secrets_template.toml pr_agent/settings/.secrets.toml
--> then edit .secrets.toml with your own keys
-```
-> `.secrets.toml` is excluded via `.gitignore` and never committed.
-
-->->-> Usage
+### Local Usage
 
 ```bash
-pr-agent --pr_url <PR_URL> review --config.model="gemini/gemini-3.6-flash" --config.fallback_models=[]
+# Set PYTHONPATH
+export PYTHONPATH=.  # On Windows: $env:PYTHONPATH="."
+
+# Run the reviewer
+python .github/workflows/review_script.py
 ```
 
-Replace `<PR_URL>` with any real GitHub pull request URL, e.g.:
+### GitHub Actions
+
+The project includes a workflow in `.github/workflows/ai-review.yml` that:
+
+1. Triggers on PR `opened`, `synchronize`, and `reopened` events
+2. Fetches PR diff and metadata
+3. Runs static/security analysis
+4. Invokes Gemini 3.8 Flash for AI analysis
+5. Posts structured review findings to the PR
+
+Configure `GEMINI_API_KEY` and `GITHUB_TOKEN` as GitHub Actions secrets.
+
+## End-to-End Verification
+
+The system was verified against a real GitHub pull request ([PR #5](https://github.com/Hhari1234/ai-code-reviewer/pull/5)).
+
+### Verified Flow
+
+```
+GitHub PR → GitHub Actions → Gemini 3.8 Flash → parsed finding → GitHub PR review
+```
+
+### Confirmed Results
+
+| Metric | Status |
+|--------|--------|
+| Gemini Invoked | YES |
+| Gemini HTTP Status | 200 |
+| Response Parsed | YES |
+| Findings Generated | YES |
+| Review Posted to PR | YES |
+| Review Contains Gemini Findings | YES |
+
+The E2E test confirmed that:
+- Gemini 3.8 Flash was actually invoked
+- Gemini returned HTTP 200 with a valid response
+- The response was successfully parsed into structured findings
+- At least one Gemini-generated finding was produced
+- The finding was posted to the pull request
+- The posted review contained the Gemini-generated finding, not only static-analysis results
+
+## Testing
+
 ```bash
-pr-agent --pr_url https://github.com/owner/repo/pull/123 review --config.model="gemini/gemini-3.6-flash" --config.fallback_models=[]
+# Run unit tests
+PYTHONPATH=. pytest tests/unittest -v
+
+# Run specific test files
+PYTHONPATH=. pytest tests/unittest/test_llm_client_api_key.py -v
+PYTHONPATH=. pytest tests/unittest/test_gemini_probe.py -v
 ```
 
-Swap `review` for `describe`, `improve`, or `ask "your question"` to run other tools.
+## Security
 
-->-> Notable setup challenges solved
+- Secrets are never committed to source control
+- API keys are read from environment variables
+- GitHub tokens are expected from GitHub Actions secrets
+- Credentials are stripped and sanitized before logging
+- Action permissions are intentionally narrow (read contents, write pull-requests)
 
-- Diagnosed and resolved a native-extension build failure (`litellm` requires compiling Rust code via `maturin`/`pyo3`) by installing the Rust toolchain and MSVC Build Tools on Windows
-- Migrated from OpenAI to Google Gemini as the inference provider to avoid billing dependency, using LiteLLM's model-routing layer
-- Implemented secure credential handling to prevent API key leakage into version control
+## Limitations
 
-->-> License
+- Advisory rather than a static-analysis guarantee
+- Large diffs are truncated for cost control
+- Line-level GitHub comments require deeper integration
 
-This project builds on [PR-Agent](https://github.com/The-PR-Agent/pr-agent), licensed under MIT.
+## Project Links
+
+- **Source Code**: https://github.com/Hhari1234/ai-code-reviewer
+- **E2E Demo**: https://github.com/Hhari1234/ai-code-reviewer/pull/5
+
+## License
+
+MIT
