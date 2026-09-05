@@ -178,9 +178,7 @@ class PRSimilarIssue:
         elif get_settings().pr_similar_issue.vectordb == "qdrant":
             try:
                 import qdrant_client
-                from qdrant_client.models import (Distance, FieldCondition,
-                                                  Filter, MatchValue,
-                                                  PointStruct, VectorParams)
+                from qdrant_client.models import Distance, FieldCondition, Filter, MatchValue, PointStruct, VectorParams
             except Exception:
                 raise Exception("Please install qdrant-client to use qdrant as vectordb")
 

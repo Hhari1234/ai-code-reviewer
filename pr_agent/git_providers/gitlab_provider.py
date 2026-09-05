@@ -7,24 +7,18 @@ from urllib.parse import parse_qs, urlparse
 
 import gitlab
 import requests
-from gitlab import (GitlabAuthenticationError, GitlabCreateError,
-                    GitlabGetError, GitlabUpdateError)
+from gitlab import GitlabAuthenticationError, GitlabCreateError, GitlabGetError, GitlabUpdateError
 
 from pr_agent.algo.types import EDIT_TYPE, FilePatchInfo
 
 from ..algo.file_filter import filter_ignored
 from ..algo.git_patch_processing import decode_if_bytes
-from ..algo.inline_comment_dedup import (body_fingerprint, body_with_markers,
-                                         code_fingerprint,
-                                         get_inline_comment_store)
+from ..algo.inline_comment_dedup import body_fingerprint, body_with_markers, code_fingerprint, get_inline_comment_store
 from ..algo.language_handler import is_valid_file
-from ..algo.utils import (clip_tokens,
-                          find_line_number_of_relevant_line_in_file,
-                          load_large_diff)
+from ..algo.utils import clip_tokens, find_line_number_of_relevant_line_in_file, load_large_diff
 from ..config_loader import get_settings
 from ..log import get_logger
-from .git_provider import (MAX_FILES_ALLOWED_FULL, GitProvider,
-                           get_cached_global_settings)
+from .git_provider import MAX_FILES_ALLOWED_FULL, GitProvider, get_cached_global_settings
 
 
 class DiffNotFoundError(Exception):

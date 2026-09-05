@@ -126,8 +126,7 @@ def _get_global_logging_worker():
     costs the queue flush, not the task drain.
     """
     try:
-        from litellm.litellm_core_utils.logging_worker import \
-            GLOBAL_LOGGING_WORKER
+        from litellm.litellm_core_utils.logging_worker import GLOBAL_LOGGING_WORKER
         return GLOBAL_LOGGING_WORKER
     except ImportError:
         get_logger().debug("litellm LoggingWorker unavailable; draining pending tasks only")

@@ -15,7 +15,10 @@ import litellm
 import pytest
 
 from pr_agent.algo.ai_handlers.litellm_helpers import (
-    _is_litellm_task, drain_litellm_callbacks, litellm_callbacks_registered)
+    _is_litellm_task,
+    drain_litellm_callbacks,
+    litellm_callbacks_registered,
+)
 from pr_agent.config_loader import global_settings
 from pr_agent.log import get_logger
 
