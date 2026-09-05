@@ -39,4 +39,4 @@ if result.findings:
 else:
     body = summary
 client.create_review(owner, repo_name, int(pr_number), body)
-print('AI review posted successfully.'
+print('AI review posted successfully.')
